@@ -231,8 +231,8 @@ dorisPlugin:
   enabled: true
   # Plugin + Dashboards image (build from images/doris-plugin/)
   image:
-    repository: dog-grafana-assets
-    tag: "v1.0.0"
+    repository: velodb/doris-app-plugin
+    tag: "v1.0"
     pullPolicy: IfNotPresent
 
 # =============================================================================
