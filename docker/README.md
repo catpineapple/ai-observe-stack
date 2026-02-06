@@ -70,10 +70,11 @@ Docker Compose 基于默认 OTel Collector 配置暴露以下端口：
 
 ## 部署步骤
 
-### 1. 下载
+### 1. 克隆仓库
 
 ```bash
-wget justtmp-1308700295.cos.ap-hongkong.myqcloud.com/DOG-docker.tar.gz
+git clone https://github.com/velodb/DogStack.git
+cd DogStack/docker
 ```
 
 ### 2. 启动服务
@@ -82,19 +83,17 @@ wget justtmp-1308700295.cos.ap-hongkong.myqcloud.com/DOG-docker.tar.gz
 docker compose up -d
 ```
 
-### 3. 查看日志
+### 3. 验证服务运行
 
 ```bash
-docker compose logs -f
+docker compose ps
 ```
+
+所有服务应显示 `running` 状态。
 
 ### 4. 访问 Grafana
 
-访问 http://localhost:3000 进入 Grafana UI。
-
-默认凭据：
-- 用户名: `admin`
-- 密码: `admin`
+访问 http://localhost:3000 并使用 `admin` / `admin` 登录。
 
 ## 访问端点
 
@@ -123,6 +122,41 @@ DORIS_FE_HTTP_PORT=8030
 DORIS_FE_MYSQL_PORT=9030
 DORIS_BE_HTTP_PORT=8040
 ```
+
+### 时区配置
+
+默认情况下，所有组件使用 **UTC** 时区。如需使用其他时区（如 `Asia/Shanghai`），需要同时修改两处配置以保持一致：
+
+**1. 修改 OTel Collector 配置**
+
+编辑 `otel-collector-config/otel-collector-config.yaml`：
+
+```yaml
+exporters:
+  doris:
+    timezone: Asia/Shanghai  # 修改此处
+```
+
+**2. 修改 Doris 容器时区**
+
+编辑 `docker-compose.yaml`，为 doris 服务添加 `TZ` 环境变量：
+
+```yaml
+services:
+  doris:
+    image: ${DORIS_IMAGE:-apache/doris:3.0.5-all}
+    environment:
+      - SKIP_CHECK_ULIMIT=true
+      - TZ=Asia/Shanghai  # 添加此行
+```
+
+修改后重启服务：
+
+```bash
+docker compose down && docker compose up -d
+```
+
+> **重要**：两处时区配置必须保持一致，否则会导致 Grafana Dashboard 中时间显示异常（如 "Last 15 minutes" 查询无数据）。
 
 ### 配置 OpenTelemetry Collector
 
