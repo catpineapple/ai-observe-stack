@@ -1,36 +1,19 @@
 # =============================================================================
-# Docker Compose - DOG Observability Stack with Doris All-in-One
+# Docker Compose - DOG Observability Stack (Without Doris)
 # =============================================================================
-# This compose file uses the apache/doris all-in-one image instead of
-# separate FE and BE containers.
+# This compose file connects to an EXTERNAL Apache Doris instance.
+# Users should configure their Doris connection via the .env file.
+#
+# Usage:
+#   1. Copy .env.example to .env
+#   2. Edit .env with your Doris connection details
+#   3. Run: docker compose -f docker-compose-without-doris.yaml up -d
+#
+# Required .env variables:
+#   - DORIS_FE_MYSQL_ENDPOINT  (e.g. 192.168.1.100:9030)
+#   - DORIS_FE_HTTP_ENDPOINT    (e.g. http://192.168.1.100:8030)
 
 services:
-  # =============================================================================
-  # Apache Doris - All-in-One (FE + BE in single container)
-  # =============================================================================
-  doris:
-    image: ${DORIS_IMAGE:-apache/doris:3.0.8-all}
-    container_name: doris
-    hostname: doris
-    restart: unless-stopped
-    privileged: true
-    ports:
-      - "${DORIS_FE_HTTP_PORT:-8030}:8030"    # FE HTTP port (Web UI)
-      - "${DORIS_FE_MYSQL_PORT:-9030}:9030"    # FE MySQL protocol port
-      - "${DORIS_BE_HTTP_PORT:-8040}:8040"     # BE HTTP port
-    environment:
-      - SKIP_CHECK_ULIMIT=true
-    volumes:
-      - doris_data:/opt/apache-doris
-    healthcheck:
-      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 9030 -uroot -e 'SHOW BACKENDS\\G' | grep -q 'Alive: true' || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 180s
-    networks:
-      - dog-observability
-
   # =============================================================================
   # OpenTelemetry Collector - OTEL Gateway with Doris Exporter
   # =============================================================================
@@ -40,16 +23,22 @@ services:
     container_name: otel-collector
     command: ["--config=/etc/otelcol/otel-collector-config.yaml"]
     volumes:
-      - ./otel-collector-config/otel-collector-config.yaml:/etc/otelcol/otel-collector-config.yaml:ro
+      - ./otel-collector-config/otel-collector-config-without-doris.yaml:/etc/otelcol/otel-collector-config.yaml:ro
     ports:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
       - "8888:8888"   # Prometheus metrics (collector self-monitoring)
       - "8889:8889"   # Prometheus exporter metrics
       - "13133:13133" # Health check extension
-    depends_on:
-      doris:
-        condition: service_healthy
+    environment:
+      - DORIS_FE_HTTP_ENDPOINT=${DORIS_FE_HTTP_ENDPOINT:-http://host.docker.internal:8030}
+      - DORIS_FE_MYSQL_ENDPOINT=${DORIS_FE_MYSQL_ENDPOINT:-host.docker.internal:9030}
+      - DORIS_USERNAME=${DORIS_USERNAME:-root}
+      - DORIS_PASSWORD=${DORIS_PASSWORD:-}
+      - DORIS_DATABASE=${DORIS_DATABASE:-otel}
+      - DORIS_TABLE_LOGS=${DORIS_TABLE_LOGS:-otel_logs}
+      - DORIS_TABLE_TRACES=${DORIS_TABLE_TRACES:-otel_traces}
+      - DORIS_TABLE_METRICS=${DORIS_TABLE_METRICS:-otel_metrics}
     restart: unless-stopped
     networks:
       - dog-observability
@@ -62,23 +51,25 @@ services:
     hostname: grafana
     container_name: grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
       - GF_LOG_LEVEL=info
       - GF_FEATURE_TOGGLES_ENABLE=traceQLStreaming metricsSummary
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=doris-app
+      # Doris connection for datasource provisioning
+      - DORIS_FE_MYSQL_ENDPOINT=${DORIS_FE_MYSQL_ENDPOINT:-host.docker.internal:9030}
+      - DORIS_USERNAME=${DORIS_USERNAME:-root}
+      - DORIS_PASSWORD=${DORIS_PASSWORD:-}
+      - DORIS_DATABASE=${DORIS_DATABASE:-otel}
     ports:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/datasources/datasources-without-doris.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./grafana/plugins/doris-app:/var/lib/grafana/plugins/doris-app:ro
-    depends_on:
-      doris:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
@@ -93,8 +84,6 @@ services:
 # Volumes
 # =============================================================================
 volumes:
-  doris_data:
-    driver: local
   grafana_data:
     driver: local
 

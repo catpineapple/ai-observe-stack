@@ -1,0 +1,23 @@
+# Grafana Datasource Provisioning (External Doris)
+# Auto-provision external Doris as MySQL-compatible datasource
+# Connection settings are read from environment variables
+
+apiVersion: 1
+
+datasources:
+  # Apache Doris - MySQL Protocol (External Instance)
+  - name: Doris
+    type: mysql
+    uid: doris
+    url: ${DORIS_FE_MYSQL_ENDPOINT}
+    user: ${DORIS_USERNAME}
+    database: ${DORIS_DATABASE}
+    isDefault: true
+    jsonData:
+      maxOpenConns: 10
+      maxIdleConns: 10
+      connMaxLifetime: 14400
+      tlsSkipVerify: true
+    secureJsonData:
+      password: ${DORIS_PASSWORD}
+    editable: true
